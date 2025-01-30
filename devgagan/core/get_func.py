@@ -136,8 +136,9 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
             file_size = None
             if msg.document or msg.photo or msg.video:
                 file_size = msg.document.file_size if msg.document else (msg.photo.file_size if msg.photo else msg.video.file_size)
-            if file_size and file_size > size_limit and (freecheck == 1 and not verified):
-                await edit.edit("**__❌ File size is greater than 2 GB, purchase premium to proceed or use /token to get 3 hour access for free__")
+            # Allow non-premium users to upload files larger than 4GB
+            if file_size and file_size > 4 * 1024 * 1024 * 1024:  # 4GB in bytes
+                await edit.edit("**__❌ File size is greater than 4 GB, which is not supported.__")
                 return
 
             edit = await app.edit_message_text(sender, edit_id, "Trying to Download...")
