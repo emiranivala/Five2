@@ -1,14 +1,13 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import random
-import requests
 import string
 import aiohttp
 from devgagan import app
 from devgagan.core.func import *
 from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
-from config import MONGO_DB, WEBSITE_URL, AD_API # you can edit this by any short link provider
+from config import MONGO_DB  # Removed WEBSITE_URL and AD_API since they are no longer needed
 
 # MongoDB setup
 tclient = AsyncIOMotorClient(MONGO_DB)
@@ -19,34 +18,17 @@ token = tdb["tokens"]
 async def create_ttl_index():
     await token.create_index("expires_at", expireAfterSeconds=0)
 
-
 # In-memory parameter storage
 Param = {}
-
 
 async def generate_random_param(length=8):
     """Generate a random parameter."""
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-
-async def get_shortened_url(deep_link):
-    api_url = f"https://{WEBSITE_URL}/api?api={AD_API}&url={deep_link}"
-    
-    # Use aiohttp to perform an asynchronous request
-    async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as response:
-            if response.status == 200:
-                data = await response.json()  # Get the JSON response asynchronously
-                if data.get("status") == "success":
-                    return data.get("shortenedUrl")
-    return None
-
-
 async def is_user_verified(user_id):
     """Check if a user has an active session."""
     session = await token.find_one({"user_id": user_id})
     return session is not None
-
 
 @app.on_message(filters.command("start"))
 async def token_handler(client, message):
@@ -58,12 +40,11 @@ async def token_handler(client, message):
     if len(message.command) <= 1:
         image_url = "https://i.postimg.cc/v8q8kGyz/startimg-1.jpg"
         join_button = InlineKeyboardButton("Join Channel", url="https://t.me/+rsngXN2zMJA5NTBl")
-        premium = InlineKeyboardButton("Get Premium", url="https://t.me/Doldotby")  # Callback for Help button
+        premium = InlineKeyboardButton("Get Premium", url="https://t.me/Doldotby")
         keyboard = InlineKeyboardMarkup([
-            [join_button],  # First button
-            [premium]   # Second button
+            [join_button],  
+            [premium]   
         ])
-        # Send the message with the image and keyboard
         await message.reply_photo(
             photo=image_url,
             caption=(
@@ -83,18 +64,16 @@ async def token_handler(client, message):
         await message.reply("You are a premium user no need of token 😉")
         return
 
-    # Handle deep link with parameter
     if param:
         if user_id in Param and Param[user_id] == param:
-            # Add user to MongoDB as a verified user for the next 6 hours
             await token.insert_one({
                 "user_id": user_id,
                 "param": param,
                 "created_at": datetime.utcnow(),
                 "expires_at": datetime.utcnow() + timedelta(hours=3),
             })
-            del Param[user_id]  # Remove the parameter from Param
-            await message.reply("✅ You have been verified successfully! Enjoy your session for next 3 hours.")
+            del Param[user_id]  
+            await message.reply("✅ You have been verified successfully! Enjoy your session for the next 3 hours.")
             return
         else:
             await message.reply("❌ Invalid or expired verification link. Please generate a new token.")
@@ -103,29 +82,29 @@ async def token_handler(client, message):
 @app.on_message(filters.command("token"))
 async def smart_handler(client, message):
     user_id = message.chat.id
-    # Check if the user is already verified or premium
     freecheck = await chk_user(message, user_id)
     if freecheck != 1:
         await message.reply("You are a premium user no need of token 😉")
         return
     if await is_user_verified(user_id):
-        await message.reply("✅ Your free session is already active enjoy!")
+        await message.reply("✅ Your free session is already active, enjoy!")
     else:
-        # Generate a session and send the link
         param = await generate_random_param()
-        Param[user_id] = param  # Store the parameter in Param dictionary
+        Param[user_id] = param  
 
-        # Create a deep link
+        # Direct deep link (No URL shortener)
         deep_link = f"https://t.me/{client.me.username}?start={param}"
 
-        # Get shortened URL
-        shortened_url = await get_shortened_url(deep_link)
-        if not shortened_url:
-            await message.reply("❌ Failed to generate the token link. Please try again.")
-            return
-
-        # Create a button with the shortened link
+        # Create a button using the direct deep link
         button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Verify the token now...", url=shortened_url)]]
+            [[InlineKeyboardButton("Verify the token now...", url=deep_link)]]
         )
-        await message.reply("Click the button below to verify your free access token: \n\n> What will you get ? \n1. No time bound upto 3 hours \n2. Batch command limit will be FreeLimit + 20 \n3. All functions unlocked", reply_markup=button)
+        
+        await message.reply(
+            "Click the button below to verify your free access token: \n\n"
+            "> What will you get?\n"
+            "1. No time bound up to 3 hours\n"
+            "2. Batch command limit will be FreeLimit + 20\n"
+            "3. All functions unlocked",
+            reply_markup=button
+        )
